@@ -1,0 +1,21 @@
+server:
+  servlet: 
+    context-path: /chat
+spring:
+  application:
+    name: chat
+  activemq:
+    broker-url: nio://localhost:61618
+    user: admin
+    password: admin
+    #true 表示使用内置的MQ，false则连接服务器
+    in-memory: false
+    #true表示使用连接池；false时，每发送一条数据创建一个连接
+    pool:
+      enabled: false
+      #连接池最大连接数
+      max-connections: 10
+      #空闲的连接过期时间，默认为30秒
+      idle-timeout: 30000
+    #queue-name: ActiveMQQueue
+    topic-name-online-service: ActiveMQTopic-OnlineService

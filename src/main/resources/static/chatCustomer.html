@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>在线客服-客户端</title>
+<link href="./style/doc.css" rel="stylesheet" type="text/css" />
+<link href="./style/chat.css" rel="stylesheet" type="text/css" />
+<script src="./js/jquery.min.js"></script>
+<script src="./js/chat.js"></script>
+</head>
+<body>
+<body>
+	<header><h1>在线客服-客户端</h1></header>
+	<div id="content">
+		<div id="c">
+			<ul>
+				<h3>我的电话号码:</h3>
+				<li>
+					<input id="userType" name="userType" type="hidden" value="customer"/>
+					<input id="userId" name="userId" type="text" value="13439962664" style="min-width:500px;width:800px"/></li>
+				<li>
+				<button id="openSocket">登录</button>
+				<button id="closeSocket">退出</button>
+				</li>
+				<h3>客服员工编号:</h3>
+				<li>
+					<input id="toUserType" name="toUserType" type="hidden"/>
+					<input id="toUserId" name="toUserId" type="text" value="" style="min-width:500px;width:800px" readonly="readonly">
+				</li>
+				<h3>聊天信息:</h3>
+				<li>
+					<textarea id="responseText" style="min-width:500px;width:800px;min-height: 200px;height: 250px" 
+					oncuechange="javascript:this.scrollTop=this.scrollHeight;" onfocus="javascript:this.scrollTop=this.scrollHeight;"
+					onchange="javascript:this.scrollTop=this.scrollHeight;"></textarea>
+				</li>
+				<h3>contentText:</h3>
+				<li>
+				<input id="contentText" name="contentText" type="text" style="min-width:500px;width:800px;min-height: 30px;height: 50px"/>
+				</li>
+				<li><button id="sendMessage">发送消息</button></li>
+			</ul>
+		</div>
+
+		<div id="left">
+			<ul id="onlineService">
+				<h3>在线客服<font id="onlineServiceCount"></font></h3>
+			</ul>
+		</div>
+	</div>
+	<footer><h2>盒子开发</h2></footer>
+</body>
+</body>
+</html>

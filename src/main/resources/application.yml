@@ -1,0 +1,3 @@
+spring:
+  profiles:
+    include: base,jdbc-syz,redis-standaone,auth,chat
