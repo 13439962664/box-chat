@@ -5,9 +5,9 @@ import java.util.List;
 
 public class ChatOnline implements Serializable {
 	private static final long serialVersionUID = 2330638623217900449L;
-	private boolean isJust;
-	private long customerCount;
-	private long serviceCount;
+	private Boolean isJust;
+	private Long customerCount;
+	private Long serviceCount;
 	private List<ChatUser> customerUsers;
 	private List<ChatUser> serviceUsers;
 
@@ -16,7 +16,6 @@ public class ChatOnline implements Serializable {
 
 	private List<ChatUser> unreadCustomerUsers;
 	private List<ChatUser> unreadServiceUsers;
-	
 
 	public List<ChatUser> getUnreadCustomerUsers() {
 		return unreadCustomerUsers;
@@ -50,27 +49,27 @@ public class ChatOnline implements Serializable {
 		this.offlineServiceUsers = offlineServiceUsers;
 	}
 
-	public boolean isJust() {
+	public Boolean getIsJust() {
 		return isJust;
 	}
 
-	public void setJust(boolean isJust) {
+	public void setIsJust(Boolean isJust) {
 		this.isJust = isJust;
 	}
 
-	public long getCustomerCount() {
+	public Long getCustomerCount() {
 		return customerCount;
 	}
 
-	public void setCustomerCount(long customerCount) {
+	public void setCustomerCount(Long customerCount) {
 		this.customerCount = customerCount;
 	}
 
-	public long getServiceCount() {
+	public Long getServiceCount() {
 		return serviceCount;
 	}
 
-	public void setServiceCount(long serviceCount) {
+	public void setServiceCount(Long serviceCount) {
 		this.serviceCount = serviceCount;
 	}
 

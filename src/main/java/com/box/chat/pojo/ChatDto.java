@@ -1,36 +1,54 @@
 package com.box.chat.pojo;
 
 import java.io.Serializable;
+import java.util.Date;
 
-public class ChatDto<P, R> implements Serializable {
+public class ChatDto<T> implements Serializable {
 	private static final long serialVersionUID = 1695176968770791034L;
-	private ChatRequest<P> request = new ChatRequest<P>();
-	private ChatResponse<R> response = new ChatResponse<R>();
+
+	private String action;
+	private String messageType = ChatMessageTypeEnum.contentText.toString();
+	private ChatUser targetUser;
+	private T data;
 
 	public ChatDto() {
 		super();
 		// TODO Auto-generated constructor stub
 	}
 
-	public ChatDto(ChatRequest<P> request, ChatResponse<R> response) {
-		super();
-		this.request = request;
-		this.response = response;
+	public T getData() {
+		return data;
 	}
 
-	public ChatRequest<P> getRequest() {
-		return request;
+	public void setData(T data) {
+		this.data = data;
 	}
 
-	public void setRequest(ChatRequest<P> request) {
-		this.request = request;
+	public String getAction() {
+		return action;
 	}
 
-	public ChatResponse<R> getResponse() {
-		return response;
+	public void setAction(String action) {
+		this.action = action;
 	}
 
-	public void setResponse(ChatResponse<R> response) {
-		this.response = response;
+	public String getMessageType() {
+		return messageType;
+	}
+
+	public void setMessageType(String messageType) {
+		this.messageType = messageType;
+	}
+
+	public ChatUser getTargetUser() {
+		return targetUser;
+	}
+
+	public void setTargetUser(ChatUser targetUser) {
+		this.targetUser = targetUser;
+	}
+	
+	public static void main(String[] args) {
+		System.out.println(new Date(System.currentTimeMillis()));
 	}
 }

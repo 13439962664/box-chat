@@ -88,15 +88,20 @@ public class ChatWebSocketServer {
 	 */
 	@OnMessage
 	public void onMessage(String requestStr, Session session) throws Exception{
-		ChatDto<ChatMessage,ChatMessage> dto = (ChatDto<ChatMessage,ChatMessage>)JSONObject.parseObject(requestStr, new TypeReference<ChatDto<ChatMessage,ChatMessage>>(){});
+		ChatDto<ChatMessage> dto = (ChatDto<ChatMessage>)JSONObject.parseObject(requestStr, new TypeReference<ChatDto<ChatMessage>>(){});
 		
-		switch(dto.getRequest().getAction()) {
+		switch(dto.getAction()) {
 			case "pullMessage":
 				getChatWebSocketService().pullMessage(dto,this.user);
 				break;
 			case "sendMessage":
 				getChatWebSocketService().sendMessage(dto,this.user);
 				break;
+			case "pullMessageHis":
+				getChatWebSocketService().sendMessageHis(dto,this.user);
+				break;
+				
+				
 		}
 	}
 	
@@ -150,7 +155,7 @@ public class ChatWebSocketServer {
 		while (keys.hasMoreElements()) {
 			String key = keys.nextElement();
 			String[] keyss = key.split(":");
-			getChatWebSocketService().getRedisUtil().expire(String.format(ChatWebSocketService.onlineUser, keyss[0], keyss[1]), ChatWebSocketService.onlineUserInfoSaveSecond);
+			getChatWebSocketService().offOnlineDelay(keyss[0],keyss[1]);
 		}
 	}
 }

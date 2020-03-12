@@ -20,15 +20,15 @@ public class ChatMessageListener {
 	private static final Logger log = LoggerFactory.getLogger(ChatMessageListener.class);
 
 	@Autowired
-	private static ChatWebSocketService chatWebSocketService;
+	private ChatWebSocketService chatWebSocketService;
 	
 	//queue模式的消费者
     @JmsListener(destination="${spring.activemq.topic-name-online-service}", containerFactory="topicListener")
     public void readActiveTopicOnlineService(String message) throws IOException {
     	if(!(message==null||"".equals(message))) {
-    		ChatDto<ChatMessage,ChatMessage> dto = (ChatDto<ChatMessage,ChatMessage>)JSONObject.parseObject(message, new TypeReference<ChatDto<ChatMessage,ChatMessage>>(){});
+    		ChatDto<ChatMessage> dto = (ChatDto<ChatMessage>)JSONObject.parseObject(message, new TypeReference<ChatDto<ChatMessage>>(){});
 //    		chatWebSocketService.pullUserMessage(dto);
-    		chatWebSocketService.pullUnreadMessagesCore(dto.getRequest().getFromUser(),dto.getResponse().getToUser());
+    		chatWebSocketService.pullUnreadMessagesCore(dto.getData().getFromUser(),dto.getData().getToUser());
     	}
     	log.info("readActiveTopic--->" + message);
     }

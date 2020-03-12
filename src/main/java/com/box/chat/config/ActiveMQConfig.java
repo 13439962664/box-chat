@@ -64,7 +64,7 @@ public class ActiveMQConfig {
     }
     
     @Bean
-    public ChatMessageProviderService mqProviderServiceForNonPersistent(@Value("${spring.activemq.topic-name-online-service}") String topicName) {
+    public ChatMessageProviderService chatMessageProviderService(@Value("${spring.activemq.topic-name-online-service}") String topicName) {
     	return new ChatMessageProviderService(jmsMessageTemplate(DeliveryMode.NON_PERSISTENT),topic(topicName));
     }
     

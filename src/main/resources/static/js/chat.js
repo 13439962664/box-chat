@@ -28,6 +28,11 @@ function bindBotton() {
 
 var socket;
 function openSocket() {
+	if (socket != null) {
+		console.log("请先退出");
+		$("#responseText").append("请先退出\n");
+		return;
+	}
 	$("onlineServiceCount").empty("");
 	$("onlineCustomerCount").empty("");
 	var initOnlineUser = $(".online_user");
@@ -65,16 +70,21 @@ function openSocket() {
 		socket.onmessage = function(msg) {
 			var dto = JSON.parse(msg.data);
 			console.log(msg.data);
-			if (dto.response.messageType == "contentText") {
+			if (dto.messageType == "contentText") {
 				showContentText(dto);
-			} else if (dto.response.messageType == "unreadMessage") {
+			} else if (dto.messageType == "unreadMessage") {
 				showUnreadMessage(dto);
-			} else if (dto.response.messageType == "onlineInfo") {
+			} else if (dto.messageType == "historyContentText") {
+				showContentText(dto);
+			} else if (dto.messageType == "historyUnreadContentText") {
+				showContentText(dto);
+			} else if (dto.messageType == "onlineInfo") {
 				showOnlineInfo(dto);
 			}
 		};
 		// 关闭事件
 		socket.onclose = function() {
+			socket = null;
 			console.log("websocket已关闭");
 			$("#responseText").append("websocket已关闭\n");
 		};
@@ -94,11 +104,11 @@ function sendMessage() {
 		console.log("您的浏览器不支持WebSocket");
 	} else {
 		console.log("您的浏览器支持WebSocket");
-		var messageJson = '{"request":{"action":"sendMessage","data":{"toUsers":[{"type":"'
+		var messageJson = '{"action":"sendMessage","targetUser":{"type":"'
 				+ $("#toUserType").val()
 				+ '","id":"'
 				+ $("#toUserId").val()
-				+ '"}],"contentText":"' + $("#contentText").val() + '"}}}';
+				+ '"},"data":{"contentText":"' + $("#contentText").val() + '"}}';
 		console.log(messageJson);
 		socket.send(messageJson);
 		var seeText = "我--->";
@@ -108,7 +118,6 @@ function sendMessage() {
 			seeText =  seeText+"[客服]";
 		}
 		seeText=seeText+$("#toUserId").val() + ":";
-		
 		$("#responseText").append(seeText+$("#contentText").val()+"\n");
 		var textarea = document.getElementById("responseText");
 		textarea.scrollTop = textarea.scrollHeight;
@@ -121,12 +130,33 @@ function pullMessage() {
 		console.log("您的浏览器不支持WebSocket");
 	} else {
 		console.log("您的浏览器支持WebSocket");
-		var messageJson = '{"request":{"action":"pullMessage","fromUser":{"type":"'
+		var messageJson = '{"action":"pullMessage","targetUser":{"type":"'
 				+ $("#toUserType").val()
 				+ '","id":"'
 				+ $("#toUserId").val()
-				+ '"}}}';
+				+ '"}}';
 		console.log("pullMessage--->");
+		console.log(messageJson);
+		socket.send(messageJson);
+	}
+}
+
+function pullMessageHis(data) {
+	if(data.toUserType==$("#toUserType").val()
+			&&data.toUserId==$("#toUserId").val()){
+		return;
+	}
+	$("#responseText").empty();
+	if (typeof (WebSocket) == "undefined") {
+		console.log("您的浏览器不支持WebSocket");
+	} else {
+		console.log("您的浏览器支持WebSocket");
+		var messageJson = '{"action":"pullMessageHis","targetUser":{"type":"'
+				+ data.toUserType
+				+ '","id":"'
+				+ data.toUserId
+				+ '"}}';
+		console.log("pullMessageHis--->");
 		console.log(messageJson);
 		socket.send(messageJson);
 	}
@@ -141,19 +171,31 @@ function closeSocket() {
 }
 
 function showContentText(dto) {
-	if (!(dto.response.data == null || dto.response.data.length == 0)) {
-		$(dto.response.data).each(
-				function(i) {
-					var seeText = dto.request.fromUser.id + "--->我:";
-					if (dto.request.fromUser.type == "customer") {
-						seeText = "[客户]" + seeText;
-					} else if (dto.request.fromUser.type == "service") {
-						seeText = "[客服]" + seeText;
-					}
-					var responseText = this.produceDate + "\n" + seeText
-							+ this.contentText;
-					$("#responseText").append(responseText+"\n");
-				});
+	var seeText = "";
+	if(dto.data.fromUser.type==$("#userType").val()&&dto.data.fromUser.id==$("#userId").val()){
+		seeText = "我--->";
+		if (dto.data.toUser.type == "customer") {
+			seeText = seeText+"[客户]" +dto.data.toUser.id;
+		} else if (dto.data.toUser.type == "service") {
+			seeText =seeText+"[客服]" +dto.data.toUser.id;
+		}
+		seeText =seeText+":"
+	}else{
+		seeText = dto.data.fromUser.id + "--->我:";
+		if (dto.data.fromUser.type == "customer") {
+			seeText = "[客户]" + seeText;
+		} else if (dto.data.fromUser.type == "service") {
+			seeText = "[客服]" + seeText;
+		}
+	}
+	var responseText = dto.data.produceDate + "\n" + seeText
+			+ dto.data.contentText;
+	if(dto.messageType=="historyContentText"){
+		$("#responseText").prepend(responseText+"\n");
+	}else if(dto.messageType=="historyUnreadContentText"){
+		$("#responseText").append("*"+responseText+"\n");
+	}else{
+		$("#responseText").append(responseText+"\n");
 	}
 }
 
@@ -183,6 +225,7 @@ function showUnreadMessageResUser(chatUser, onlineDivId) {
 				"toUserType" : chatUser.type,
 				"toUserId" : chatUser.id
 			}, function(event) {
+				pullMessageHis(event.data);
 				$("#toUserType").val(event.data.toUserType);
 				$("#toUserId").val(event.data.toUserId);
 				pullMessage();
@@ -202,11 +245,7 @@ function showUnreadMessageRes(chatOnline) {
 }
 
 function showUnreadMessage(dto) {
-	if (!(dto.response.data == null || dto.response.data.length == 0)) {
-		$(dto.response.data).each(function(i) {
-			showUnreadMessageRes(this);
-		});
-	}
+	showUnreadMessageRes(dto.data);
 }
 
 function showOnlineInfoResUser(chatUser, onlineDivId, liClass) {
@@ -219,6 +258,7 @@ function showOnlineInfoResUser(chatUser, onlineDivId, liClass) {
 			"toUserType" : chatUser.type,
 			"toUserId" : chatUser.id
 		}, function(event) {
+			pullMessageHis(event.data);
 			$("#toUserType").val(event.data.toUserType);
 			$("#toUserId").val(event.data.toUserId);
 			pullMessage();
@@ -228,7 +268,7 @@ function showOnlineInfoResUser(chatUser, onlineDivId, liClass) {
 }
 
 function showOnlineInfoRes(chatOnline, just) {
-
+	
 	$("#onlineServiceCount").html("[" + chatOnline.serviceCount + "]");
 	$("#onlineCustomerCount").html("[" + chatOnline.customerCount + "]");
 	var liClass = "online_user";
@@ -272,9 +312,5 @@ function showOnlineInfo(dto) {
 		$(this).remove();
 	});
 
-	if (!(dto.response.data == null || dto.response.data.length == 0)) {
-		$(dto.response.data).each(function(i) {
-			showOnlineInfoRes(this, dto.response.data.just);
-		});
-	}
+	showOnlineInfoRes(dto.data, dto.data.just);
 }

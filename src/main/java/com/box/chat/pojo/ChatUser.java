@@ -2,13 +2,13 @@ package com.box.chat.pojo;
 
 import java.io.Serializable;
 
-public class ChatUser implements Serializable{
+public class ChatUser implements Serializable {
 	private static final long serialVersionUID = -7917604429240552798L;
 	private String id;
 	private String type = ChatUserTypeEnum.customer.toString();
 	private String name;
-	private long toMeUnreadMessageCount;
-	
+	private Long toMeUnreadMessageCount;
+
 	public ChatUser() {
 		super();
 	}
@@ -18,7 +18,7 @@ public class ChatUser implements Serializable{
 		this.id = id;
 		this.type = type;
 	}
-	
+
 	public ChatUser(String id, String type, long toMeUnreadMessageCount) {
 		super();
 		this.id = id;
@@ -31,11 +31,11 @@ public class ChatUser implements Serializable{
 		return "ChatUser [id=" + id + ", type=" + type + ", name=" + name + "]";
 	}
 
-	public long getToMeUnreadMessageCount() {
+	public Long getToMeUnreadMessageCount() {
 		return toMeUnreadMessageCount;
 	}
 
-	public void setToMeUnreadMessageCount(long toMeUnreadMessageCount) {
+	public void setToMeUnreadMessageCount(Long toMeUnreadMessageCount) {
 		this.toMeUnreadMessageCount = toMeUnreadMessageCount;
 	}
 

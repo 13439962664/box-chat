@@ -2,9 +2,6 @@ package com.box.chat.pojo;
 
 import java.io.Serializable;
 import java.util.Date;
-import java.util.List;
-
-import com.fasterxml.jackson.annotation.JsonFormat;
 
 public class ChatMessage implements Serializable {
 	private static final long serialVersionUID = -6627365431820129056L;
@@ -12,16 +9,33 @@ public class ChatMessage implements Serializable {
 	private String action;
 	private String sessionId;
 	private String contentText;
-	@JsonFormat(pattern = "yyyy-MM-dd HH:mm")
 	private Date produceDate;
-	private List<ChatUser> toUsers;
+	private Date readDate;
+	private ChatUser toUser;
+	private ChatUser fromUser;
 
-	public List<ChatUser> getToUsers() {
-		return toUsers;
+	public Date getReadDate() {
+		return readDate;
 	}
 
-	public void setToUsers(List<ChatUser> toUsers) {
-		this.toUsers = toUsers;
+	public void setReadDate(Date readDate) {
+		this.readDate = readDate;
+	}
+
+	public ChatUser getFromUser() {
+		return fromUser;
+	}
+
+	public void setFromUser(ChatUser fromUser) {
+		this.fromUser = fromUser;
+	}
+
+	public ChatUser getToUser() {
+		return toUser;
+	}
+
+	public void setToUser(ChatUser toUser) {
+		this.toUser = toUser;
 	}
 
 	public String getContentText() {

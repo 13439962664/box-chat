@@ -2,7 +2,7 @@ package com.box.chat.service;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,22 +16,22 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.TypeReference;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.box.chat.controller.ChatWebSocketServer;
+import com.box.chat.dao.ChatMessageDao;
 import com.box.chat.pojo.ChatDto;
 import com.box.chat.pojo.ChatMessage;
 import com.box.chat.pojo.ChatMessageTypeEnum;
 import com.box.chat.pojo.ChatOnline;
-import com.box.chat.pojo.ChatRequest;
-import com.box.chat.pojo.ChatResponse;
 import com.box.chat.pojo.ChatUser;
 import com.box.chat.pojo.ChatUserTypeEnum;
-import com.box.utils.ApplicationContextHolder;
 import com.box.utils.RedisUtil;
 import com.box.utils.lock.RedisLock;
 
@@ -43,115 +43,118 @@ public class ChatWebSocketService {
 	private static final String justOfflineUser = "crm:online:justoffline:%s:%s";
 	private static final String messageAddress = "crm:message:fromuser:%s:%s:touser:%s:%s";
 	private static final String messageAddressLock = "crm:message:lock:fromuser:%s:%s:touser:%s:%s";
-	private static final String JSONStringWithDateFormat = "yyyy-MM-dd HH:mm:ss";
+	private static final String JSONStringWithDateFormat = "yyyy-MM-dd HH:mm";
 	public static final int onlineUserInfoSaveSecond = 10;
 	private static final int justOnlineUserInfoSaveSecond = 12;
 	private static final int messageAddressLockTime = 200;
 	private static final int messageAddressLockWaitTime = 2000;
 	private static final Logger log = LoggerFactory.getLogger(ChatWebSocketServer.class);
 	
-	private static ChatMessageProviderService mqProviderService;
-	private static RedisUtil redisUtil;
-	private static RedisLock redisLock;
+	@Autowired
+	private ChatMessageProviderService chatMessageProviderService;
+	@Autowired
+	private RedisUtil redisUtil;
+	@Autowired
+	private RedisLock redisLock;
 	
-	private ChatMessageProviderService getMQProviderService() {
-		if (mqProviderService == null) {
-			mqProviderService = ApplicationContextHolder.getBean("mqProviderServiceForNonPersistent");
-		}
-		return mqProviderService;
+	@Autowired
+	private ChatMessageDao chatMessageDao;
+	
+	//拉取已读历史信息
+	public void sendMessageHis(ChatDto<ChatMessage> dto,ChatUser myUser) throws IOException {
+		List<ChatDto> listDto = chatMessageDao.findMessageHis(myUser,dto.getTargetUser(),new Date(System.currentTimeMillis()),100);
+		if(!(listDto==null||listDto.size()==0)) {
+			for(ChatDto<ChatMessage> dtoTemp:listDto) {
+				dtoTemp.setMessageType(ChatMessageTypeEnum.historyContentText.toString());
+				dtoTemp.setTargetUser(myUser);
+				sendInfo(dtoTemp);
+			}
+		};
+		sendMessageHisUnread(dto,myUser);
 	}
-
-	public static RedisLock redisLock() {
-		if (redisLock == null) {
-			redisLock = ApplicationContextHolder.getBean("redisLock");
+	
+	//拉取对方未读历史信息
+	public void sendMessageHisUnread(ChatDto<ChatMessage> dto,ChatUser myUser) throws IOException {
+		List<Object> dtoJsonStrs = redisUtil.lGet(String.format(messageAddress,myUser.getType(),myUser.getId(),dto.getTargetUser().getType(), dto.getTargetUser().getId()), 0, -1);
+		if(!(dtoJsonStrs==null||dtoJsonStrs.size()==0)) {
+			for (Object dtoJsonStr : dtoJsonStrs) {
+				ChatDto<ChatMessage> dtoTemp = (ChatDto<ChatMessage>)JSONObject.parseObject(dtoJsonStr.toString(), new TypeReference<ChatDto<ChatMessage>>(){});
+				dtoTemp.setMessageType(ChatMessageTypeEnum.historyUnreadContentText.toString());
+				dtoTemp.setTargetUser(myUser);
+				sendInfo(dtoTemp);
+			}
 		}
-		return redisLock;
-	}
-
-	public static RedisUtil getRedisUtil() {
-		if (redisUtil == null) {
-			redisUtil = ApplicationContextHolder.getBean("redisUtil");
-		}
-		return redisUtil;
 	}
 	
 	//拉取信息
-	public void pullMessage(ChatDto<ChatMessage,ChatMessage> dto,ChatUser toUser) throws IOException {
-		ChatRequest<ChatMessage> request = dto.getRequest();
+	public void pullMessage(ChatDto<ChatMessage> dto,ChatUser myUser) throws IOException {
 		ChatMessage message = new ChatMessage();
-		request.setData(message);
-		message.setToUsers(Arrays.asList(toUser));
-		pullMessageCore(dto,toUser);
-		pullUnreadMessagesCore(request.getFromUser(),toUser);
+		dto.setData(message);
+		message.setToUser(myUser);
+		pullMessageCore(dto,myUser);
+//		pullUnreadMessagesCore(message.getFromUser(),myUser);
 	}
 	
 	//发送信息
-	public void sendMessage(ChatDto<ChatMessage,ChatMessage> dto,ChatUser fromUset) {
-		ChatRequest<ChatMessage> request = dto.getRequest();
-		ChatResponse<ChatMessage> response = dto.getResponse();
-		response.setMessageType(ChatMessageTypeEnum.contentText.toString());
-		ChatMessage message = request.getData();
-		ChatMessage resData = new ChatMessage();
-		resData.setAction(message.getAction());
-		resData.setContentText(message.getContentText());
-		resData.setProduceDate(message.getProduceDate());
-		resData.setToUsers(message.getToUsers());
+	public void sendMessage(ChatDto<ChatMessage> dto,ChatUser myUser) {
+		dto.setMessageType(ChatMessageTypeEnum.contentText.toString());
+		ChatMessage message = dto.getData();
+		message.setToUser(dto.getTargetUser());
 		// 追加发送人(防止串改)
-		request.setFromUser(fromUset);
-		message.setProduceDate(new Date());
-		log.info("用户消息:" + fromUset.toString() + ",报文:" + message.toString());
+		message.setFromUser(myUser);
+		message.setProduceDate(Calendar.getInstance().getTime());
+		log.info("用户消息:" + myUser.toString() + ",报文:" + message.toString());
 		// 可以群发消息
 		// 消息保存到数据库redis
 		try {
 			// 存入redis
-			if(!(message.getToUsers()==null||message.getToUsers().size()==0)) {
-				for(ChatUser toUser:message.getToUsers()) {
-					if(!(toUser.getType()==null||"".equals(toUser.getType())
-							||toUser.getId()==null||"".equals(toUser.getId()))) {
-						response.setToUser(toUser);
-						getRedisUtil().lSet(String.format(messageAddress,request.getFromUser().getType(),request.getFromUser().getId(),toUser.getType(),toUser.getId()),
-								JSONObject.toJSONStringWithDateFormat(dto, JSONStringWithDateFormat,SerializerFeature.WriteDateUseDateFormat));
-						// 发送消息
-						getMQProviderService().send(JSONObject.toJSONStringWithDateFormat(dto, JSONStringWithDateFormat,SerializerFeature.WriteDateUseDateFormat));
-					}else{
-						getRedisUtil().lSet(String.format(messageAddress,request.getFromUser().getType(),request.getFromUser().getId(),null,null),
-								JSONObject.toJSONStringWithDateFormat(dto, JSONStringWithDateFormat,SerializerFeature.WriteDateUseDateFormat));
-					}
-				}
+			if(!(message.getToUser().getType()==null||"".equals(message.getToUser().getType())
+					||message.getToUser().getId()==null||"".equals(message.getToUser().getId()))) {
+				dto.setTargetUser(message.getToUser());
+				redisUtil.lSet(String.format(messageAddress,dto.getData().getFromUser().getType(),dto.getData().getFromUser().getId(),message.getToUser().getType(),message.getToUser().getId()),
+						JSONObject.toJSONString(dto, SerializerFeature.UseISO8601DateFormat));
+				// 发送消息
+				chatMessageProviderService.send(JSONObject.toJSONString(dto, SerializerFeature.UseISO8601DateFormat));
+			}else{
+				redisUtil.lSet(String.format(messageAddress,dto.getData().getFromUser().getType(),dto.getData().getFromUser().getId(),null,null),
+						JSONObject.toJSONString(dto, SerializerFeature.UseISO8601DateFormat));
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
-	
-	public static void pullUserMessage(ChatDto<ChatMessage,ChatMessage> dto,ConcurrentHashMap<String, ChatWebSocketServer> webSocketMap) throws IOException {
-		String userTypeAndId = String.format("%s:%s", dto.getResponse().getToUser().getType(), dto.getResponse().getToUser().getId());
+	@Transactional
+	public void pullUserMessage(ChatDto<ChatMessage> dto,ConcurrentHashMap<String, ChatWebSocketServer> webSocketMap) throws IOException {
+		String userTypeAndId = String.format("%s:%s", dto.getTargetUser().getType(), dto.getTargetUser().getId());
 		if (StringUtils.isNotBlank(userTypeAndId) && webSocketMap.containsKey(userTypeAndId)) {
 			String uuid = UUID.randomUUID().toString();
-			boolean bl = redisLock().lock(String.format(messageAddressLock,dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),dto.getResponse().getToUser().getType(), dto.getResponse().getToUser().getId()), uuid,
+			boolean bl = redisLock.lock(String.format(messageAddressLock,dto.getData().getFromUser().getType(),dto.getData().getFromUser().getId(),dto.getTargetUser().getType(), dto.getTargetUser().getId()), uuid,
 					messageAddressLockTime, messageAddressLockWaitTime);
 			if (bl) {
-				List<Object> dtoJsonStrs = getRedisUtil().lGet(String.format(messageAddress,dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),dto.getResponse().getToUser().getType(), dto.getResponse().getToUser().getId()), 0, -1);
-				getRedisUtil().del(String.format(messageAddress,dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),dto.getResponse().getToUser().getType(), dto.getResponse().getToUser().getId()));
-				redisLock().unlock(String.format(messageAddressLock,dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),dto.getResponse().getToUser().getType(), dto.getResponse().getToUser().getId()), uuid);
+				List<Object> dtoJsonStrs = redisUtil.lGet(String.format(messageAddress,dto.getData().getFromUser().getType(),dto.getData().getFromUser().getId(),dto.getTargetUser().getType(), dto.getTargetUser().getId()), 0, -1);
+				
 				if(!(dtoJsonStrs==null||dtoJsonStrs.size()==0)) {
 					for (Object dtoJsonStr : dtoJsonStrs) {
 						// 此处需要保存到数据库
 						JSONObject dtoJson = JSONObject.parseObject(dtoJsonStr.toString());
-						ChatDto<ChatMessage,ChatMessage> dtoTemp = (ChatDto<ChatMessage,ChatMessage>)JSONObject.parseObject(dtoJsonStr.toString(), new TypeReference<ChatDto<ChatMessage,ChatMessage>>(){});
-						ChatRequest<ChatMessage> requestTemp = dtoTemp.getRequest();
-						dto.getResponse().setData(Arrays.asList(requestTemp.getData()));
+						ChatDto<ChatMessage> dtoTemp = (ChatDto<ChatMessage>)JSONObject.parseObject(dtoJsonStr.toString(), new TypeReference<ChatDto<ChatMessage>>(){});
+						dto.setData(dtoTemp.getData());
+						dto.getData().setToUser(dto.getTargetUser());
+						dto.getData().setReadDate(new Date(System.currentTimeMillis()));
+						sendInfo(dto);
+						chatMessageDao.saveMessage(dto);
 					}
-					sendInfo(dto);
 				}
+				redisUtil.del(String.format(messageAddress,dto.getData().getFromUser().getType(),dto.getData().getFromUser().getId(),dto.getTargetUser().getType(), dto.getTargetUser().getId()));
+				redisLock.unlock(String.format(messageAddressLock,dto.getData().getFromUser().getType(),dto.getData().getFromUser().getId(),dto.getTargetUser().getType(), dto.getTargetUser().getId()), uuid);
 			}
 		} else {
 			log.error("用户" + userTypeAndId + ",不在线！");
-			subOnlineCount(dto.getResponse().getToUser());
+			subOnlineCount(dto.getTargetUser());
 		}
 	}
 	
-	public static void pullUnreadMessagesCore(ChatUser fromUser,ChatUser toUser) throws IOException {
+	public void pullUnreadMessagesCore(ChatUser fromUser,ChatUser toUser) throws IOException {
 		String fromUserType = "*";
 		String fromUserId = "*";
 		Set<Object> keys = new HashSet<Object>();
@@ -164,35 +167,36 @@ public class ChatWebSocketService {
 				||toUser==null||toUser.getType()==null||"".equals(toUser.getType())
 				||toUser.getId()==null||"".equals(toUser.getId()))) {
 			//指定对话信息
-			keysft = getRedisUtil().keys(String.format(messageAddress, fromUser.getType(),fromUser.getId(),toUser.getType(),toUser.getId()));
+			keysft = redisUtil.keys(String.format(messageAddress, fromUser.getType(),fromUser.getId(),toUser.getType(),toUser.getId()));
 			keys.addAll(keysft);
 		}else {
 			//未指定接收人的全部信息
-			keysf = getRedisUtil().keys(String.format(messageAddress, "*","*",null,null));
+			keysf = redisUtil.keys(String.format(messageAddress, "*","*",null,null));
 			keys.addAll(keysf);
 			if(!(toUser==null||toUser.getType()==null||"".equals(toUser.getType())
 					||toUser.getId()==null||"".equals(toUser.getId()))) {
 				//指定接收人的全部信息
-				keyst = getRedisUtil().keys(String.format(messageAddress, "*","*",toUser.getType(),toUser.getId()));
+				keyst = redisUtil.keys(String.format(messageAddress, "*","*",toUser.getType(),toUser.getId()));
 				keys.addAll(keyst);
 			}
 		}
 		//初始未读消息DTO
-		ChatDto<ChatMessage,ChatOnline> dto = new ChatDto<ChatMessage,ChatOnline>();
+		ChatDto<ChatMessage> dtoM = new ChatDto<ChatMessage>();
+		ChatDto<ChatOnline> dto = new ChatDto<ChatOnline>();
 		ChatOnline online = new ChatOnline();
 		online.setUnreadCustomerUsers(new ArrayList<ChatUser>());
 		online.setUnreadServiceUsers(new ArrayList<ChatUser>());
 		
 		Map<String,ChatUser> userMap = new HashMap<String,ChatUser>();
 		for (Object key : keys) {
-			long messageSize = getRedisUtil().lGetListSize(key.toString());
-			String dtoJsonStr = (String)getRedisUtil().lGetIndex(key.toString(),0);
-			dto = (ChatDto<ChatMessage,ChatOnline>)JSONObject.parseObject(dtoJsonStr, new TypeReference<ChatDto<ChatMessage,ChatOnline>>(){});
-			String userTypeAndId = String.format("%s:%s", dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId());
+			long messageSize = redisUtil.lGetListSize(key.toString());
+			String dtoJsonStr = (String)redisUtil.lGetIndex(key.toString(),0);
+			dtoM = (ChatDto<ChatMessage>)JSONObject.parseObject(dtoJsonStr, new TypeReference<ChatDto<ChatMessage>>(){});
+			String userTypeAndId = String.format("%s:%s", dtoM.getData().getFromUser().getType(),dtoM.getData().getFromUser().getId());
 			//按信息发送者，累加未读消息
 			ChatUser chatUser = null;
 			if(userMap.get(userTypeAndId)==null) {
-				chatUser = new ChatUser(dto.getRequest().getFromUser().getId(),dto.getRequest().getFromUser().getType(),messageSize);
+				chatUser = new ChatUser(dtoM.getData().getFromUser().getId(),dtoM.getData().getFromUser().getType(),messageSize);
 				userMap.put(userTypeAndId, chatUser);
 			}else {
 				chatUser = userMap.get(userTypeAndId);
@@ -208,97 +212,104 @@ public class ChatWebSocketService {
 				online.getUnreadCustomerUsers().add(entry.getValue());
 			}
 		}
-		
-		dto.getResponse().setMessageType(ChatMessageTypeEnum.unreadMessage.toString());
-		dto.getResponse().setData(Arrays.asList(online));
+		dto.setData(online);
+		dto.setMessageType(ChatMessageTypeEnum.unreadMessage.toString());
 		if(!(toUser==null||toUser.getType()==null||"".equals(toUser.getType())
 				||toUser.getId()==null||"".equals(toUser.getId()))) {
 			//指定接收者
-			dto.getResponse().setToUser(toUser);
+			dto.setTargetUser(toUser);
 			sendInfo(dto);
 		}else if(!(keysf==null||keysf.size()==0)){
-			List<Object> serviceUsers = getRedisUtil().getList(String.format(onlineUser, ChatUserTypeEnum.service.toString(), "*"));
+			List<Object> serviceUsers = redisUtil.getList(String.format(onlineUser, ChatUserTypeEnum.service.toString(), "*"));
 			//发送给在线的客服人员
 			for(Object user:serviceUsers) {
 				ChatUser chatUser = JSONObject.parseObject(user.toString(), ChatUser.class);
-				dto.getResponse().setToUser(new ChatUser(chatUser.getId(), chatUser.getType()));
+				dto.setTargetUser(new ChatUser(chatUser.getId(), chatUser.getType()));
 				sendInfo(dto);
 			}
 		}
 	}
 	
-	public void pullMessageCore(ChatDto<ChatMessage,ChatMessage> dto,ChatUser toUser) throws IOException {
+	@Transactional
+	public void pullMessageCore(ChatDto<ChatMessage> dto,ChatUser myUser) throws IOException {
+		ChatUser targetUser = dto.getTargetUser();
 		String uuid = UUID.randomUUID().toString();
 		List<Object> messages = new ArrayList<Object>();
-		if(toUser.getType().equals(ChatUserTypeEnum.service.toString())) {
-			boolean bl = redisLock().lock(String.format(messageAddressLock, dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),null,null), uuid,
+		List<Object> messagesNotToUser = null;
+		List<Object> messagesMy = null;
+		boolean blNotToUser = false; 
+		boolean blMy = false;
+		if(myUser.getType().equals(ChatUserTypeEnum.service.toString())) {
+			blNotToUser = redisLock.lock(String.format(messageAddressLock, targetUser.getType(),targetUser.getId(),null,null), uuid,
 					messageAddressLockTime, messageAddressLockWaitTime);
-			if(bl) {
-				List<Object> messagesNotToUser = getRedisUtil().lGet(String.format(messageAddress, dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),null,null), 0, -1);
+			if(blNotToUser) {
+				messagesNotToUser = redisUtil.lGet(String.format(messageAddress, targetUser.getType(),targetUser.getId(),null,null), 0, -1);
 				messages.addAll(messagesNotToUser);
-				getRedisUtil().del(String.format(messageAddress, dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),null,null));
-				redisLock().unlock(String.format(messageAddressLock, dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),null,null), uuid);
 			}
 		}
-		boolean blMy = redisLock().lock(String.format(messageAddressLock, dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),toUser.getType(),toUser.getId()), uuid,
+		blMy = redisLock.lock(String.format(messageAddressLock, targetUser.getType(),targetUser.getId(),myUser.getType(),myUser.getId()), uuid,
 				messageAddressLockTime, messageAddressLockWaitTime);
 		if(blMy) {
-			List<Object> messagesMy = getRedisUtil().lGet(String.format(messageAddress, dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),toUser.getType(),toUser.getId()), 0, -1);
-			getRedisUtil().del(String.format(messageAddress, dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),toUser.getType(),toUser.getId()));
-			redisLock().unlock(String.format(messageAddressLock, dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),toUser.getType(),toUser.getId()), uuid);
+			messagesMy = redisUtil.lGet(String.format(messageAddress, targetUser.getType(),targetUser.getId(),myUser.getType(),myUser.getId()), 0, -1);
 			messages.addAll(messagesMy);
 		}
-		dto.getResponse().setData(new ArrayList<ChatMessage>());
+		
 //		List<ChatDto<ChatMessage,ChatMessage>> dtoTempList = new ArrayList<ChatDto<ChatMessage,ChatMessage>>();
 		if(!(messages==null||messages.size()==0)) {
 			for (Object dtoJsonStr : messages) {
 				// 此处需要保存到数据库
-				ChatDto<ChatMessage,ChatMessage> dtoTemp = (ChatDto<ChatMessage,ChatMessage>)JSONObject.parseObject(dtoJsonStr.toString(), new TypeReference<ChatDto<ChatMessage,ChatMessage>>(){});
-				dtoTemp.getRequest().getData().setToUsers(dto.getRequest().getData().getToUsers());
+				ChatDto<ChatMessage> dtoTemp = (ChatDto<ChatMessage>)JSONObject.parseObject(dtoJsonStr.toString(), new TypeReference<ChatDto<ChatMessage>>(){});
+				dtoTemp.getData().setToUser(myUser);
 	//			dtoTempList.add(dtoTemp);
-				dto.getResponse().getData().add(dtoTemp.getRequest().getData());
+				dto.setData(dtoTemp.getData());
+				dto.setTargetUser(dto.getData().getToUser());
+				dto.getData().setReadDate(new Date(System.currentTimeMillis()));
+				sendInfo(dto);
+				chatMessageDao.saveMessage(dto);
 			}
-			//调试后可以删除
-			if(!(dto.getResponse().getData()==null||dto.getResponse().getData().size()==0)) {
-				if(!(dto.getRequest().getData().getToUsers()==null||dto.getRequest().getData().getToUsers().size()==0)) {
-					for(ChatUser toTempUser:dto.getRequest().getData().getToUsers()) {
-						dto.getResponse().setToUser(toTempUser);
-	//						getRedisUtil().lSet(String.format(messageAddress,dto.getRequest().getFromUser().getType(),dto.getRequest().getFromUser().getId(),dto.getResponse().getToUser().getType(),dto.getResponse().getToUser().getId()), dtoTempList);
-						sendInfo(dto);
-					}
-				}
+		}
+		if(blNotToUser) {
+			if(!(messagesNotToUser==null||messagesNotToUser.size()==0)) {
+				redisUtil.del(String.format(messageAddress, targetUser.getType(),targetUser.getId(),null,null));
 			}
+			redisLock.unlock(String.format(messageAddressLock, targetUser.getType(),targetUser.getId(),null,null), uuid);
+		}
+		if(blMy) {
+			if(!(messagesMy==null||messagesMy.size()==0)) {
+				redisUtil.del(String.format(messageAddress, targetUser.getType(),targetUser.getId(),myUser.getType(),myUser.getId()));
+			}
+			redisLock.unlock(String.format(messageAddressLock, targetUser.getType(),targetUser.getId(),myUser.getType(),myUser.getId()), uuid);
 		}
 	}
 	
-	public void loadChatOnlineUsersCore(List<ChatUser> userList,boolean isJust) throws IOException {
+	public void loadChatOnlineUsersCore(List<ChatUser> userList,Boolean isJust) throws IOException {
 		if(userList==null) {
 			userList = new ArrayList<ChatUser>();
-			List<Object> userListJsonStr = getRedisUtil().getList(String.format(onlineUser, "*", "*"));
+			List<Object> userListJsonStr = redisUtil.getList(String.format(onlineUser, "*", "*"));
 			for(Object userJsonStr:userListJsonStr) {
 				ChatUser user = JSONObject.parseObject(userJsonStr.toString(), ChatUser.class);
 				userList.add(user);
 			}
 		}
-		ChatDto<Object, Object> dto = new ChatDto<Object, Object>();
+		ChatDto<ChatOnline> dto = new ChatDto<ChatOnline>();
 		ChatOnline chatOnlineUsers = new ChatOnline();
-		chatOnlineUsers.setJust(isJust);
-		dto.getResponse().setMessageType(ChatMessageTypeEnum.onlineInfo.toString());
+		chatOnlineUsers.setIsJust(isJust);
+		dto.setMessageType(ChatMessageTypeEnum.onlineInfo.toString());
 		chatOnlineUsers.setCustomerCount(getOnlineCount(ChatUserTypeEnum.customer.toString()));
 		chatOnlineUsers.setServiceCount(getOnlineCount(ChatUserTypeEnum.service.toString()));
 		List<Object> serviceUsers = null;
 		List<Object> customerUsers = null;
 		List<Object> offlineServiceUsers = null;
 		List<Object> offlineCustomerUsers = null;
-		if(chatOnlineUsers.isJust()) {
-			serviceUsers = getRedisUtil().getList(String.format(justOnlineUser, ChatUserTypeEnum.service.toString(), "*"));
-			customerUsers = getRedisUtil().getList(String.format(justOnlineUser, ChatUserTypeEnum.customer.toString(), "*"));
+		if(chatOnlineUsers.getIsJust()) {
+			serviceUsers = redisUtil.getList(String.format(justOnlineUser, ChatUserTypeEnum.service.toString(), "*"));
+			customerUsers = redisUtil.getList(String.format(justOnlineUser, ChatUserTypeEnum.customer.toString(), "*"));
 			
-			offlineServiceUsers = getRedisUtil().getList(String.format(justOfflineUser, ChatUserTypeEnum.service.toString(), "*"));
-			offlineCustomerUsers = getRedisUtil().getList(String.format(justOfflineUser, ChatUserTypeEnum.customer.toString(), "*"));
+			offlineServiceUsers = redisUtil.getList(String.format(justOfflineUser, ChatUserTypeEnum.service.toString(), "*"));
+			offlineCustomerUsers = redisUtil.getList(String.format(justOfflineUser, ChatUserTypeEnum.customer.toString(), "*"));
 		}else {
-			serviceUsers = getRedisUtil().getList(String.format(onlineUser, ChatUserTypeEnum.service.toString(), "*"));
-			customerUsers = getRedisUtil().getList(String.format(onlineUser, ChatUserTypeEnum.customer.toString(), "*"));
+			serviceUsers = redisUtil.getList(String.format(onlineUser, ChatUserTypeEnum.service.toString(), "*"));
+			customerUsers = redisUtil.getList(String.format(onlineUser, ChatUserTypeEnum.customer.toString(), "*"));
 		}
 		chatOnlineUsers.setCustomerUsers(new ArrayList<ChatUser>());
 		chatOnlineUsers.setServiceUsers(new ArrayList<ChatUser>());
@@ -314,7 +325,7 @@ public class ChatWebSocketService {
 			chatOnlineUsers.getCustomerUsers().add(chatUser);
 		}
 		
-		if(chatOnlineUsers.isJust()) {
+		if(chatOnlineUsers.getIsJust()) {
 			chatOnlineUsers.setOfflineCustomerUsers(new ArrayList<ChatUser>());
 			chatOnlineUsers.setOfflineServiceUsers(new ArrayList<ChatUser>());
 			//在线客服
@@ -335,10 +346,10 @@ public class ChatWebSocketService {
 		
 		//告知给哪些用户
 		for(ChatUser user:userList) {
-			dto.getResponse().setToUser(new ChatUser(user.getId(), user.getType()));
+			dto.setTargetUser(new ChatUser(user.getId(), user.getType()));
 			//如果通知的用户是客户，则把在线客户隐藏；如是客服，则不隐藏
 			if(user.getType().equals(ChatUserTypeEnum.customer.toString())) {
-				chatOnlineUsers.setCustomerCount(0);
+				chatOnlineUsers.setCustomerCount(null);
 				chatOnlineUsers.setCustomerUsers(null);
 				chatOnlineUsers.setOfflineCustomerUsers(null);
 			}else {
@@ -346,7 +357,7 @@ public class ChatWebSocketService {
 				chatOnlineUsers.setCustomerUsers(tempCustomerUsers);
 				chatOnlineUsers.setOfflineCustomerUsers(tempOfflineCustomerUsers);
 			}
-			dto.getResponse().setData(Arrays.asList(chatOnlineUsers));
+			dto.setData(chatOnlineUsers);
 			sendInfo(dto);
 		}
 	}
@@ -354,33 +365,35 @@ public class ChatWebSocketService {
 	/**
 	 * 发送自定义消息
 	 */
-	public static <P,R> void sendInfo(ChatDto<P,R> dto) throws IOException {
-		String userTypeAndId = String.format("%s:%s", dto.getResponse().getToUser().getType(),dto.getResponse().getToUser().getId());
+	public static <T> void sendInfo(ChatDto<T> dto) throws IOException {
+		String userTypeAndId = String.format("%s:%s", dto.getTargetUser().getType(),dto.getTargetUser().getId());
 		if (StringUtils.isNotBlank(userTypeAndId) && ChatWebSocketServer.webSocketMap.containsKey(userTypeAndId)) {
-//			log.info("发送消息报文:" + JSONObject.toJSONStringWithDateFormat(dto, JSONStringWithDateFormat,SerializerFeature.WriteDateUseDateFormat));
-			ChatWebSocketServer.webSocketMap.get(userTypeAndId).sendMessageNow(JSONObject.toJSONStringWithDateFormat(dto, JSONStringWithDateFormat,SerializerFeature.WriteDateUseDateFormat));
+//			log.info("发送消息报文:" + JSONObject.toJSONString(dto, SerializerFeature.UseISO8601DateFormat));
+			ChatWebSocketServer.webSocketMap.get(userTypeAndId).sendMessageNow(JSONObject.toJSONStringWithDateFormat(dto,JSONStringWithDateFormat, SerializerFeature.WriteDateUseDateFormat));
 		} else {
 			log.error("用户" + userTypeAndId + ",不在线！");
 		}
 	}
 	
 	public long getOnlineCount(String userType) {
-		long count = getRedisUtil().getSize(String.format(onlineUser, userType, "*"));
+		long count = redisUtil.getSize(String.format(onlineUser, userType, "*"));
 		return count;
 	}
 
 	public void addOnlineCount(ChatUser chatUser) {
-		getRedisUtil().set(String.format(onlineUser,chatUser.getType(),chatUser.getId()), JSON.toJSONString(chatUser), onlineUserInfoSaveSecond);
-		getRedisUtil().del(String.format(justOfflineUser, chatUser.getType(),chatUser.getId()));
-		getRedisUtil().set(String.format(justOnlineUser, chatUser.getType(),chatUser.getId()), JSON.toJSONString(chatUser),justOnlineUserInfoSaveSecond);
+		redisUtil.set(String.format(onlineUser,chatUser.getType(),chatUser.getId()), JSON.toJSONString(chatUser), onlineUserInfoSaveSecond);
+		redisUtil.del(String.format(justOfflineUser, chatUser.getType(),chatUser.getId()));
+		redisUtil.set(String.format(justOnlineUser, chatUser.getType(),chatUser.getId()), JSON.toJSONString(chatUser),justOnlineUserInfoSaveSecond);
 	}
 
-	public static void subOnlineCount(ChatUser chatUser) {
-		Object obj = getRedisUtil().get(String.format(onlineUser, chatUser.getType(),chatUser.getId()));
-		getRedisUtil().del(String.format(onlineUser, chatUser.getType(),chatUser.getId()));
-		getRedisUtil().del(String.format(justOnlineUser, chatUser.getType(),chatUser.getId()));
-		getRedisUtil().set(String.format(justOfflineUser, chatUser.getType(),chatUser.getId()),obj,justOnlineUserInfoSaveSecond);
+	public void subOnlineCount(ChatUser chatUser) {
+		Object obj = redisUtil.get(String.format(onlineUser, chatUser.getType(),chatUser.getId()));
+		redisUtil.del(String.format(onlineUser, chatUser.getType(),chatUser.getId()));
+		redisUtil.del(String.format(justOnlineUser, chatUser.getType(),chatUser.getId()));
+		redisUtil.set(String.format(justOfflineUser, chatUser.getType(),chatUser.getId()),obj,justOnlineUserInfoSaveSecond);
 	}
 	
-	
+	public void offOnlineDelay(String userType,String userId) {
+		redisUtil.expire(String.format(ChatWebSocketService.onlineUser, userType, userId), onlineUserInfoSaveSecond);
+	}
 }
