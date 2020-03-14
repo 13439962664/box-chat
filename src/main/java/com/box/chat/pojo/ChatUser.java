@@ -7,6 +7,7 @@ public class ChatUser implements Serializable {
 	private String id;
 	private String type = ChatUserTypeEnum.customer.toString();
 	private String name;
+	private String onlineNode;
 	private Long toMeUnreadMessageCount;
 
 	public ChatUser() {
@@ -29,6 +30,14 @@ public class ChatUser implements Serializable {
 	@Override
 	public String toString() {
 		return "ChatUser [id=" + id + ", type=" + type + ", name=" + name + "]";
+	}
+
+	public String getOnlineNode() {
+		return onlineNode;
+	}
+
+	public void setOnlineNode(String onlineNode) {
+		this.onlineNode = onlineNode;
 	}
 
 	public Long getToMeUnreadMessageCount() {

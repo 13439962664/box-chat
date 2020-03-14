@@ -2,18 +2,13 @@ package com.box.chat.config;
 
 import javax.jms.ConnectionFactory;
 import javax.jms.DeliveryMode;
-import javax.jms.Session;
-import javax.jms.Topic;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
-import org.apache.activemq.command.ActiveMQTopic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.jms.config.JmsListenerContainerFactory;
-import org.springframework.jms.config.SimpleJmsListenerContainerFactory;
 import org.springframework.jms.core.JmsMessagingTemplate;
 import org.springframework.jms.core.JmsTemplate;
 
@@ -32,13 +27,6 @@ public class ActiveMQConfig {
 
     @Value("${spring.activemq.password}")
     private String password;
-
-    @Value("${spring.activemq.topic-name-online-service}")
-    private String topicNameOnlineService;
-	
-	public Topic topic(String topicName) {
-		return new ActiveMQTopic(topicName);
-	}
 	
 	@Bean
     public ConnectionFactory connectionFactory(){
@@ -62,31 +50,36 @@ public class ActiveMQConfig {
 //        log.info("messagingTemplate jmsTemplate SessionTransacted--->"+messagingTemplate.getJmsTemplate().isSessionTransacted());
         return messagingTemplate;
     }
+    //@Value("${spring.activemq.quere-name-online-service}") String quereName,@Value("${com.box.chat.node}") String chatNodeId
+    @Bean
+    public ChatMessageProviderService chatMessageNonPersistentProviderService() {
+    	return new ChatMessageProviderService(jmsMessageTemplate(DeliveryMode.NON_PERSISTENT));//,quere(quereName+":"+chatNodeId)
+    }
     
     @Bean
-    public ChatMessageProviderService chatMessageProviderService(@Value("${spring.activemq.topic-name-online-service}") String topicName) {
-    	return new ChatMessageProviderService(jmsMessageTemplate(DeliveryMode.NON_PERSISTENT),topic(topicName));
+    public ChatMessageProviderService chatMessagePersistentProviderService() {
+    	return new ChatMessageProviderService(jmsMessageTemplate(DeliveryMode.PERSISTENT));//,quere(quereName+":"+chatNodeId)
     }
     
   //在Queue模式中，对消息的监听需要对containerFactory进行配置
-    @Bean("queueListener")
-    public JmsListenerContainerFactory<?> queueJmsListenerContainerFactory(ConnectionFactory connectionFactory){
-        SimpleJmsListenerContainerFactory factory = new SimpleJmsListenerContainerFactory();
-        factory.setConnectionFactory(connectionFactory);
-        factory.setPubSubDomain(false);
-        factory.setSessionTransacted(true);
-        factory.setSessionAcknowledgeMode(Session.SESSION_TRANSACTED);
-        return factory;
-    }
+//    @Bean("queueListener")
+//    public JmsListenerContainerFactory<?> queueJmsListenerContainerFactory(ConnectionFactory connectionFactory){
+//        SimpleJmsListenerContainerFactory factory = new SimpleJmsListenerContainerFactory();
+//        factory.setConnectionFactory(connectionFactory);
+//        factory.setPubSubDomain(false);
+//        factory.setSessionTransacted(true);
+//        factory.setSessionAcknowledgeMode(Session.SESSION_TRANSACTED);
+//        return factory;
+//    }
     
     //在Topic模式中，对消息的监听需要对containerFactory进行配置
-    @Bean("topicListener")
-    public JmsListenerContainerFactory<?> topicJmsListenerContainerFactory(ConnectionFactory connectionFactory){
-        SimpleJmsListenerContainerFactory factory = new SimpleJmsListenerContainerFactory();
-        factory.setConnectionFactory(connectionFactory);
-        factory.setPubSubDomain(true);
-        factory.setSessionTransacted(true);
-        factory.setSessionAcknowledgeMode(Session.SESSION_TRANSACTED);
-        return factory;
-    }
+//    @Bean("topicListener")
+//    public JmsListenerContainerFactory<?> topicJmsListenerContainerFactory(ConnectionFactory connectionFactory){
+//        SimpleJmsListenerContainerFactory factory = new SimpleJmsListenerContainerFactory();
+//        factory.setConnectionFactory(connectionFactory);
+//        factory.setPubSubDomain(true);
+//        factory.setSessionTransacted(true);
+//        factory.setSessionAcknowledgeMode(Session.SESSION_TRANSACTED);
+//        return factory;
+//    }
 }

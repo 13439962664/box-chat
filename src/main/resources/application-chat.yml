@@ -18,4 +18,4 @@ spring:
       #空闲的连接过期时间，默认为30秒
       idle-timeout: 30000
     #queue-name: ActiveMQQueue
-    topic-name-online-service: ActiveMQTopic-OnlineService
+    quere-online-notice: ActiveMQQuere-OnlineNotice

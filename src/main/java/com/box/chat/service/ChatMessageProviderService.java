@@ -21,19 +21,19 @@ public class ChatMessageProviderService {
 	private static final Logger log = LoggerFactory.getLogger(ChatMessageProviderService.class);
 
 	// 注入存放消息的队列，用于下列方法一
-	private Destination destination;
+//	private Destination destination;
 
 	// 注入springboot封装的工具类
 	private JmsMessagingTemplate jmsMessagingTemplate;
 	
-	public ChatMessageProviderService(JmsMessagingTemplate jmsMessagingTemplate,Destination destination) {
+	public ChatMessageProviderService(JmsMessagingTemplate jmsMessagingTemplate) {//,Destination destination
 		super();
-		this.destination = destination;
+//		this.destination = destination;
 		this.jmsMessagingTemplate = jmsMessagingTemplate;
 	}
 
 	@Transactional
-	public String send(String message) throws JMSException {
+	public String send(Destination destination,String message) throws JMSException {
 		return this.sendMessage(destination, message);
 	}
 

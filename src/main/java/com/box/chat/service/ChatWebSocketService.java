@@ -13,10 +13,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.jms.Queue;
+
+import org.apache.activemq.command.ActiveMQQueue;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,8 +54,12 @@ public class ChatWebSocketService {
 	private static final int messageAddressLockWaitTime = 2000;
 	private static final Logger log = LoggerFactory.getLogger(ChatWebSocketServer.class);
 	
+	@Value("${spring.activemq.quere-online-notice}") String quereName;
+	@Value("${com.box.chat.node}")
+	private String chatNode;
+	
 	@Autowired
-	private ChatMessageProviderService chatMessageProviderService;
+	private ChatMessageProviderService chatMessageNonPersistentProviderService;
 	@Autowired
 	private RedisUtil redisUtil;
 	@Autowired
@@ -113,8 +121,13 @@ public class ChatWebSocketService {
 				dto.setTargetUser(message.getToUser());
 				redisUtil.lSet(String.format(messageAddress,dto.getData().getFromUser().getType(),dto.getData().getFromUser().getId(),message.getToUser().getType(),message.getToUser().getId()),
 						JSONObject.toJSONString(dto, SerializerFeature.UseISO8601DateFormat));
-				// 发送消息
-				chatMessageProviderService.send(JSONObject.toJSONString(dto, SerializerFeature.UseISO8601DateFormat));
+				Object user = redisUtil.get(String.format(onlineUser, message.getToUser().getType(),message.getToUser().getId()));
+				if(user!=null) {
+					ChatUser chatUser = JSONObject.parseObject(user.toString(), ChatUser.class);
+					Queue queue = new ActiveMQQueue(quereName+":"+chatUser.getOnlineNode());
+					// 发送消息
+					chatMessageNonPersistentProviderService.send(queue,JSONObject.toJSONString(dto, SerializerFeature.UseISO8601DateFormat));
+				}
 			}else{
 				redisUtil.lSet(String.format(messageAddress,dto.getData().getFromUser().getType(),dto.getData().getFromUser().getId(),null,null),
 						JSONObject.toJSONString(dto, SerializerFeature.UseISO8601DateFormat));
@@ -154,7 +167,7 @@ public class ChatWebSocketService {
 		}
 	}
 	
-	public void pullUnreadMessagesCore(ChatUser fromUser,ChatUser toUser) throws IOException {
+	public void noticeUnreadMessagesCore(ChatUser fromUser,ChatUser toUser) throws IOException {
 		String fromUserType = "*";
 		String fromUserId = "*";
 		Set<Object> keys = new HashSet<Object>();
@@ -381,6 +394,7 @@ public class ChatWebSocketService {
 	}
 
 	public void addOnlineCount(ChatUser chatUser) {
+		chatUser.setOnlineNode(this.chatNode);
 		redisUtil.set(String.format(onlineUser,chatUser.getType(),chatUser.getId()), JSON.toJSONString(chatUser), onlineUserInfoSaveSecond);
 		redisUtil.del(String.format(justOfflineUser, chatUser.getType(),chatUser.getId()));
 		redisUtil.set(String.format(justOnlineUser, chatUser.getType(),chatUser.getId()), JSON.toJSONString(chatUser),justOnlineUserInfoSaveSecond);

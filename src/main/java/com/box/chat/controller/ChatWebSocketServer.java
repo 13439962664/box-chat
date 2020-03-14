@@ -32,7 +32,7 @@ public class ChatWebSocketServer {
 
 	private static final String reloadOnlineUserInfo = "0/10 * * * * ?";
 	private static final String onlineUserHeartbeat = "0/5 * * * * ?";
-	private static final String pullUnreadMessages = "0/7 * * * * ?";
+	private static final String noticeUnreadMessages = "0/7 * * * * ?";
 	private static final Logger log = LoggerFactory.getLogger(ChatWebSocketServer.class);
 
 	/** 静态变量，用来记录当前在线连接数。应该把它设计成线程安全的。 */
@@ -75,7 +75,7 @@ public class ChatWebSocketServer {
 		try {
 //			sendMessageNow("连接成功");
 			getChatWebSocketService().loadChatOnlineUsersCore(Arrays.asList(chatUser),false);
-			getChatWebSocketService().pullUnreadMessagesCore(null,chatUser);
+			getChatWebSocketService().noticeUnreadMessagesCore(null,chatUser);
 		} catch (IOException e) {
 			log.error("用户:" + userId + ",网络异常!!!!!!");
 		}
@@ -112,9 +112,9 @@ public class ChatWebSocketServer {
 		this.session.getBasicRemote().sendText(message);
 	}
 	
-	@Scheduled(cron = pullUnreadMessages)
-	private void pullUnreadMessages() throws IOException {
-		getChatWebSocketService().pullUnreadMessagesCore(null,null);
+	@Scheduled(cron = noticeUnreadMessages)
+	private void noticeUnreadMessages() throws IOException {
+		getChatWebSocketService().noticeUnreadMessagesCore(null,null);
 	}
 	
 	
