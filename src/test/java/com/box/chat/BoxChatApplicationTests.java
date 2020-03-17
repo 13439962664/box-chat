@@ -12,6 +12,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.box.chat.dao.ChatMessageDao;
 import com.box.chat.pojo.ChatDto;
 import com.box.chat.pojo.ChatUser;
+import com.box.utils.RedisUtil;
 
 @SpringBootTest
 class BoxChatApplicationTests {
@@ -21,7 +22,11 @@ class BoxChatApplicationTests {
 
 	
 	@Autowired
-	private ChatMessageDao chatMessageDao;
+	private RedisUtil redisUtil;
+	
+	void testRedisUtil() {
+		log.info("*********************{}",redisUtil.get("shiro:session:078ebeda-6605-4d3d-909f-f73efcea00bd"));
+	}
 	
 	@Test
 	void contextLoads() {

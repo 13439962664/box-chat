@@ -19,3 +19,6 @@ spring:
       idle-timeout: 30000
     #queue-name: ActiveMQQueue
     quere-online-notice: ActiveMQQuere-OnlineNotice
+    
+    
+    

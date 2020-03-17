@@ -43,6 +43,9 @@ public class ChatMessageDao {
 				.and("data.fromUser.type").is(myUser.getType())
 				.and("data.fromUser._id").is(myUser.getId());
 		Criteria cr = new Criteria().orOperator(crToMy,crToOther);
+		if(lastDate!=null) {
+			cr.and("data.produceDate").lt(lastDate);
+		}
 		Query query = new Query(cr);
 		query.with(Sort.by(Sort.Direction.DESC,"data.produceDate"));
 		query.limit(limit);

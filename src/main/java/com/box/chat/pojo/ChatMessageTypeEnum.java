@@ -1,5 +1,5 @@
 package com.box.chat.pojo;
 
 public enum ChatMessageTypeEnum {
-	contentText,onlineInfo,unreadMessage,historyContentText,historyUnreadContentText;
+	contentText,onlineInfo,unreadMessage,historyContentText;
 }

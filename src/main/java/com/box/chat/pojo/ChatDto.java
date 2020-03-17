@@ -9,12 +9,25 @@ public class ChatDto<T> implements Serializable {
 	private String action;
 	private String messageType = ChatMessageTypeEnum.contentText.toString();
 	private ChatUser targetUser;
+	private String targetDate;
 	private T data;
 
 	public ChatDto() {
 		super();
 		// TODO Auto-generated constructor stub
 	}
+
+	public String getTargetDate() {
+		return targetDate;
+	}
+
+
+
+	public void setTargetDate(String targetDate) {
+		this.targetDate = targetDate;
+	}
+
+
 
 	public T getData() {
 		return data;

@@ -76,8 +76,6 @@ function openSocket() {
 				showUnreadMessage(dto);
 			} else if (dto.messageType == "historyContentText") {
 				showContentText(dto);
-			} else if (dto.messageType == "historyUnreadContentText") {
-				showContentText(dto);
 			} else if (dto.messageType == "onlineInfo") {
 				showOnlineInfo(dto);
 			}
@@ -95,6 +93,11 @@ function openSocket() {
 		}
 	}
 }
+
+function anchoringResponseTextBottom(){
+	$("#responseText").animate({scrollTop:$("#responseText").children("div:last-child").offset().top},500);
+}
+
 function sendMessage() {
 	if(socket==null||$("#contentText").val()==""
 		||($("#userType").val()=="service"&&($("#toUserType").val()==""||$("#toUserId").val()==""))){
@@ -111,16 +114,13 @@ function sendMessage() {
 				+ '"},"data":{"contentText":"' + $("#contentText").val() + '"}}';
 		console.log(messageJson);
 		socket.send(messageJson);
-		var seeText = "我--->";
-		if ($("#toUserType").val() == "customer") {
-			seeText =  seeText+"[客户]";
-		} else if ($("#toUserType").val() == "service") {
-			seeText =  seeText+"[客服]";
-		}
-		seeText=seeText+$("#toUserId").val() + ":";
-		$("#responseText").append(seeText+$("#contentText").val()+"\n");
-		var textarea = document.getElementById("responseText");
-		textarea.scrollTop = textarea.scrollHeight;
+		
+		var htmlText = $("<div style='clear:both'></div>");
+		htmlText.html("我:"+$("#contentText").val());
+		htmlText.css("float","right");
+		
+		$("#responseText").append(htmlText);
+		anchoringResponseTextBottom();
 	}
 	return true;
 }
@@ -141,24 +141,27 @@ function pullMessage() {
 	}
 }
 
-function pullMessageHis(data) {
-	if(data.toUserType==$("#toUserType").val()
-			&&data.toUserId==$("#toUserId").val()){
+function pullMessageHis(data,firstDate) {
+	if(data==null&&firstDate==null){
 		return;
 	}
-	$("#responseText").empty();
+	if(data==null){
+		data={"toUserType":$("#toUserType").val(),"toUserId":$("#toUserId").val()};
+	}else{
+		$("#responseText").empty();
+	}
 	if (typeof (WebSocket) == "undefined") {
 		console.log("您的浏览器不支持WebSocket");
 	} else {
 		console.log("您的浏览器支持WebSocket");
-		var messageJson = '{"action":"pullMessageHis","targetUser":{"type":"'
-				+ data.toUserType
-				+ '","id":"'
-				+ data.toUserId
-				+ '"}}';
+		var messageJson = {"action":"pullMessageHis",
+				"targetDate":+firstDate==null?"":firstDate,
+				"targetUser":{"type":data.toUserType,
+					"id":data.toUserId}
+				};
 		console.log("pullMessageHis--->");
 		console.log(messageJson);
-		socket.send(messageJson);
+		socket.send(JSON.stringify(messageJson));
 	}
 }
 
@@ -170,32 +173,57 @@ function closeSocket() {
 	}
 }
 
-function showContentText(dto) {
-	var seeText = "";
-	if(dto.data.fromUser.type==$("#userType").val()&&dto.data.fromUser.id==$("#userId").val()){
-		seeText = "我--->";
-		if (dto.data.toUser.type == "customer") {
-			seeText = seeText+"[客户]" +dto.data.toUser.id;
-		} else if (dto.data.toUser.type == "service") {
-			seeText =seeText+"[客服]" +dto.data.toUser.id;
-		}
-		seeText =seeText+":"
-	}else{
-		seeText = dto.data.fromUser.id + "--->我:";
-		if (dto.data.fromUser.type == "customer") {
-			seeText = "[客户]" + seeText;
-		} else if (dto.data.fromUser.type == "service") {
-			seeText = "[客服]" + seeText;
-		}
+function showContentTextData(data,messageType){
+	var htmlDate = $("<div style='clear:both;margin:0px 0px 0px 40%;'></div>");
+	var htmlText = $("<div style='clear:both'></div>");
+	htmlDate.html(data.produceDate.substring(0,16));
+	htmlDate.attr("id",data.produceDate);
+	if(messageType=="historyUnreadContentText"){
+		htmlText.html("*"+data.contentText);
 	}
-	var responseText = dto.data.produceDate + "\n" + seeText
-			+ dto.data.contentText;
-	if(dto.messageType=="historyContentText"){
-		$("#responseText").prepend(responseText+"\n");
-	}else if(dto.messageType=="historyUnreadContentText"){
-		$("#responseText").append("*"+responseText+"\n");
+	if(data.fromUser.type==$("#userType").val()&&data.fromUser.id==$("#userId").val()){
+		htmlText.html("我:"+data.contentText);
+		htmlText.css("float","right");
 	}else{
-		$("#responseText").append(responseText+"\n");
+		htmlText.html(data.fromUser.id+":"+data.contentText);
+		htmlText.css("float","left");
+	}
+		
+	if(messageType=="historyContentText"){
+		$("#responseText").prepend(htmlText);
+		$("#responseText").prepend(htmlDate);
+	}else{
+		$("#responseText").append(htmlDate);
+		$("#responseText").append(htmlText);
+	}
+}
+
+var scrollTopFlag = -1;
+
+function showContentText(dto) {
+	if(dto.messageType=="historyContentText"){
+		if(dto.data!=null&&dto.data.length>0){
+			$(dto.data).each(function(i) {
+				showContentTextData(this,dto.messageType);
+			});
+			
+			scrollTopFlag = 0;
+			$("#responseText").bind("scroll",function(){
+				var scrollTop = $("#responseText").scrollTop();
+//				totalHeight = $("#responseText").height();
+				if(scrollTop==scrollTopFlag){
+					alert(scrollTop);
+					$(this).unbind('scroll');
+					scrollTopFlag=-1;
+					pullMessageHis(null,$("#responseText").children("div:first-child").attr("id"));
+				}
+			});
+		}
+	}else{
+		showContentTextData(dto.data,dto.messageType);
+	}
+	if(dto.targetDate==null){
+		anchoringResponseTextBottom();
 	}
 }
 

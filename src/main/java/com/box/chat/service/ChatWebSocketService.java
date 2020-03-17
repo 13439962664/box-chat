@@ -1,6 +1,8 @@
 package com.box.chat.service;
 
 import java.io.IOException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -47,11 +49,12 @@ public class ChatWebSocketService {
 	private static final String justOfflineUser = "crm:online:justoffline:%s:%s";
 	private static final String messageAddress = "crm:message:fromuser:%s:%s:touser:%s:%s";
 	private static final String messageAddressLock = "crm:message:lock:fromuser:%s:%s:touser:%s:%s";
-	private static final String JSONStringWithDateFormat = "yyyy-MM-dd HH:mm";
+	private static final String JSONStringWithDateFormat = "yyyy-MM-dd HH:mm:ss:SSS";
 	public static final int onlineUserInfoSaveSecond = 10;
 	private static final int justOnlineUserInfoSaveSecond = 12;
 	private static final int messageAddressLockTime = 200;
 	private static final int messageAddressLockWaitTime = 2000;
+	private static final int sendMessageHisEveryReadLimit = 5;
 	private static final Logger log = LoggerFactory.getLogger(ChatWebSocketServer.class);
 	
 	@Value("${spring.activemq.quere-online-notice}") String quereName;
@@ -69,29 +72,53 @@ public class ChatWebSocketService {
 	private ChatMessageDao chatMessageDao;
 	
 	//拉取已读历史信息
-	public void sendMessageHis(ChatDto<ChatMessage> dto,ChatUser myUser) throws IOException {
-		List<ChatDto> listDto = chatMessageDao.findMessageHis(myUser,dto.getTargetUser(),new Date(System.currentTimeMillis()),100);
-		if(!(listDto==null||listDto.size()==0)) {
-			for(ChatDto<ChatMessage> dtoTemp:listDto) {
-				dtoTemp.setMessageType(ChatMessageTypeEnum.historyContentText.toString());
-				dtoTemp.setTargetUser(myUser);
-				sendInfo(dtoTemp);
+	public void sendMessageHis(ChatDto<ChatMessage> dto,ChatUser myUser) throws IOException, ParseException {
+		ChatDto<List<ChatMessage>> resultDto = new ChatDto<List<ChatMessage>>();
+		List<ChatMessage> listCM = sendMessageHisUnread(dto,myUser); 
+		int everyReadLimit = sendMessageHisEveryReadLimit;
+		if(!(listCM==null||listCM.size()==0)) {
+			everyReadLimit = everyReadLimit-listCM.size();
+		}
+		if(everyReadLimit>0) {
+			Date lastDate = dto.getTargetDate()==null||"".equals(dto.getTargetDate())?null:new SimpleDateFormat(JSONStringWithDateFormat).parse(dto.getTargetDate()); 
+			List<ChatDto> listDto = chatMessageDao.findMessageHis(myUser,dto.getTargetUser(),lastDate,everyReadLimit);
+			if(!(listDto==null||listDto.size()==0)) {
+				for(ChatDto<ChatMessage> dtoTemp:listDto) {
+//					dtoTemp.setMessageType(ChatMessageTypeEnum.historyContentText.toString());
+//					dtoTemp.setTargetUser(myUser);
+					listCM.add(dtoTemp.getData());
+//					sendInfo(dtoTemp);
+				}
 			}
-		};
-		sendMessageHisUnread(dto,myUser);
+		}
+		
+		if(!(listCM==null||listCM.size()==0)) {
+			resultDto.setData(listCM);
+			resultDto.setTargetUser(myUser);
+			resultDto.setTargetDate(dto.getTargetDate());
+			resultDto.setMessageType(ChatMessageTypeEnum.historyContentText.toString());
+			sendInfo(resultDto);
+		}
 	}
 	
 	//拉取对方未读历史信息
-	public void sendMessageHisUnread(ChatDto<ChatMessage> dto,ChatUser myUser) throws IOException {
+	public List<ChatMessage> sendMessageHisUnread(ChatDto<ChatMessage> dto,ChatUser myUser) throws IOException {
+//		ChatDto<List<ChatMessage>> resultDto = new ChatDto<List<ChatMessage>>();
+		List<ChatMessage> listCM = new ArrayList<ChatMessage>(); 
 		List<Object> dtoJsonStrs = redisUtil.lGet(String.format(messageAddress,myUser.getType(),myUser.getId(),dto.getTargetUser().getType(), dto.getTargetUser().getId()), 0, -1);
 		if(!(dtoJsonStrs==null||dtoJsonStrs.size()==0)) {
-			for (Object dtoJsonStr : dtoJsonStrs) {
+			for (int i=0;i<dtoJsonStrs.size();i++) {
+				String dtoJsonStr = (String)dtoJsonStrs.get(dtoJsonStrs.size()-i-1);
 				ChatDto<ChatMessage> dtoTemp = (ChatDto<ChatMessage>)JSONObject.parseObject(dtoJsonStr.toString(), new TypeReference<ChatDto<ChatMessage>>(){});
-				dtoTemp.setMessageType(ChatMessageTypeEnum.historyUnreadContentText.toString());
-				dtoTemp.setTargetUser(myUser);
-				sendInfo(dtoTemp);
+				listCM.add(dtoTemp.getData());
+//				sendInfo(dtoTemp);
 			}
+//			resultDto.setTargetUser(myUser);
+//			resultDto.setMessageType(ChatMessageTypeEnum.historyUnreadContentText.toString());
+//			resultDto.setData(listCM);
+//			sendInfo(resultDto);
 		}
+		return listCM;
 	}
 	
 	//拉取信息
